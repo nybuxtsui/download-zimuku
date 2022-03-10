@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+
+import requests
+from lxml import etree
+import sys
+import re
+
+sess = requests.Session()
+
+def get_filename_from_cd(cd):
+    print(cd)
+    """
+    Get filename from content-disposition
+    """
+    if not cd:
+        return None
+    fname = re.findall('filename=(.+)', cd)
+    if len(fname) == 0:
+        return None
+    return fname[0]
+
+if len(sys.argv) == 1:
+    print('download <url> [index]')
+elif len(sys.argv) == 2:
+    resp = sess.get(sys.argv[1])
+    n = etree.HTML(resp.text)
+    items = []
+    i = 1
+    for a in n.xpath('//table[@id="subtb"]/tbody/tr/td[@class="first"]/a'):
+        items.append((i, a.xpath('./b/text()')[0]))
+        i = i + 1
+
+    for item in items:
+        print(item)
+else:
+    items = []
+    resp = sess.get(sys.argv[1])
+    n = etree.HTML(resp.text)
+    for i in range(2, len(sys.argv)):
+        for a in n.xpath(f'//table[@id="subtb"]/tbody/tr[{sys.argv[i]}]/td[@class="first"]/a'):
+            items.append((i, a.xpath('./b/text()')[0], a.xpath('./@href')[0]))
+    for item in items:
+        url = f'https://zimuku.org/dld/{item[2].split("/")[2]}'
+        resp = sess.get(url)
+        n = etree.HTML(resp.text)
+        url = n.xpath("//li[1]/a/@href")[0]
+        print(f'downloading: https://zimuku.org/{url}')
+        r = sess.get(f'https://zimuku.org/{url}', headers={'referer': f'https://zimuku.org/{url}'})
+        filename = get_filename_from_cd(r.headers.get('content-disposition'))
+        filename = filename.strip('"')
+        i = filename.split('.')
+        filename = item[1] + "." + i[len(i)-1]
+        print(f'download: {filename}')
+        open(f"/home/xubin/downloads/{filename}", 'wb').write(r.content)
